@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.example.mutuellemanager"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -36,6 +36,27 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("upload-keystore.jks") // Chemin relatif depuis le dossier 'android/app'
+            storePassword = "EasyMut77" // Remplace par ton mot de passe
+            keyAlias = "upload" // Alias utilisé lors de la génération
+            keyPassword = "EasyMut77" // Remplace par ton mot de passe
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release") // Utilise la config release
+            isMinifyEnabled = true // Active la réduction de code (optionnel)
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }

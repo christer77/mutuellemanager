@@ -7,6 +7,8 @@ class Membre {
   String prenom;
   String? telephone;
   String? adresse;
+  String dateAdhesion;
+  String? statut;
   String? profession;
   String? activiteActuelle;
   int synchronized; // 0 = non synchronisé, 1 = synchronisé
@@ -19,6 +21,8 @@ class Membre {
     required this.prenom,
     this.telephone,
     this.adresse,
+    required this.dateAdhesion,
+    required this.statut,
     this.profession,
     this.activiteActuelle,
     this.synchronized = 0,
@@ -34,6 +38,8 @@ class Membre {
       'prenom': prenom,
       'telephone': telephone,
       'adresse': adresse,
+      'dateAdhesion': dateAdhesion,
+      'statut': statut,
       'profession': profession,
       'activite_actuelle': activiteActuelle,
       'synchronized': synchronized,
@@ -50,6 +56,8 @@ class Membre {
       prenom: map['prenom'],
       telephone: map['telephone'],
       adresse: map['adresse'],
+      dateAdhesion: map['dateAdhesion'] ?? '',
+      statut: map['statut'] ?? '',
       profession: map['profession'],
       activiteActuelle: map['activite_actuelle'],
       synchronized: map['synchronized'],

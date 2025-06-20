@@ -1,6 +1,7 @@
 // lib/screens/add_member_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
+import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart'; // Pour générer un UUID
 import 'package:permission_handler/permission_handler.dart'; // Pour les permissions
 import 'package:flutter/services.dart';
@@ -30,6 +31,8 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
   late TextEditingController _adresseController;
   late TextEditingController _professionController;
   late TextEditingController _activiteActuelleController;
+  late TextEditingController _dateAdhesionController ;
+  DateTime? _selectedAdhesionDate;
 
   bool _isGeneratingAffiliation = true; // Par défaut, générer l'affiliation
 
@@ -44,6 +47,9 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     _adresseController = TextEditingController();
     _professionController = TextEditingController();
     _activiteActuelleController = TextEditingController();
+    _dateAdhesionController = TextEditingController();
+    _selectedAdhesionDate = DateTime.now(); // Date par défaut
+    _dateAdhesionController.text = DateFormat('yyyy-MM-dd').format(_selectedAdhesionDate!);
 
     if (widget.memberToEdit != null) {
       // Si c'est une modification, pré-remplir les champs
@@ -75,6 +81,21 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     super.dispose();
   }
 
+  Future<void> _selectAdhesionDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedAdhesionDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedAdhesionDate) {
+      setState(() {
+        _selectedAdhesionDate = picked;
+        _dateAdhesionController.text = DateFormat('yyyy-MM-dd').format(_selectedAdhesionDate!);
+      });
+    }
+  }
+
   void _generateAffiliationNumber() {
     if (_isGeneratingAffiliation) {
       _numeroAffiliationController.text = 'MUT-${_uuid.v4().substring(0, 8).toUpperCase()}'; // Ex: MUT-A1B2C3D4
@@ -83,129 +104,89 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
     }
   }
 
-  /* Future<void> _pickContact() async {
-    SnackBar(
-      content: Text('Permission de contacts refusée. Veuillez l\'activer dans les paramètres pour importer des contacts.'),
-      action: SnackBarAction(label: 'Ouvrir Paramètres', onPressed: openAppSettings), // Ouvre les paramètres de l'application
-    );
-    print('Statut de la permission contacts xxxxxxxxxxxxxx');
-    final PermissionStatus permission = await Permission.contacts.request();
-    print('Statut de la permission contacts : $permission');
-    if (permission.isGranted) {
+  Future<void> requestContactsPermission() async {
+    final status = await Permission.contacts.status;
+    if (status.isGranted) {
+      _pickContact();
+    } else {
+      final result = await Permission.contacts.request();
+      if (result.isGranted) {
+        _pickContact();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Permission requise pour accéder aux contacts')),
+        );
+      }
+    }
+  }
+ Future<void> _pickContact() async {
+    
+    // if (await FlutterContacts.requestPermission()) {
       try {
-        final Contact? contact = await ContactsService.openDeviceContactPicker();
+        // 2. Ouvrir le sélecteur de contacts
+        // Ici, nous voulons un contact complet, y compris les adresses et téléphones
+        final Contact? contact = await FlutterContacts.openExternalPick(); // Ouvre le sélecteur natif
+        // Vous pouvez aussi utiliser FlutterContacts.getContacts() si vous voulez afficher votre propre liste
+        // et filtrer les contacts. openExternalPick() est plus simple pour l'import.
+
         if (contact != null) {
           setState(() {
-            _nomController.text = contact.familyName ?? '';
-            _prenomController.text = contact.givenName ?? '';
-            // Tente de séparer le post-nom si le nom est composé de 3 parties
-            if (contact.middleName != null && contact.middleName!.isNotEmpty) {
-              _postNomController.text = contact.middleName!;
-            } else if (contact.displayName != null) {
-              final parts = contact.displayName!.split(' ');
-              if (parts.length >= 3) {
-                _postNomController.text = parts[parts.length - 2]; // Souvent le 2ème nom
-              }
+            // Remplir les champs du formulaire avec les données du contact
+            _nomController.text = contact.name.first ?? ''; // Nom de famille
+            _postNomController.text = contact.name.last ?? ''; // Post-Nom (middle name)
+            _prenomController.text = contact.name.middle ?? ''; // Prénom
+            
+
+            // Récupérer le premier numéro de téléphone (s'il existe)
+            if (contact.phones.isNotEmpty) {
+              _telephoneController.text = contact.phones.first.number ?? '';
+            } else {
+              _telephoneController.text = '';
             }
 
-            if (contact.phones != null && contact.phones!.isNotEmpty) {
-              _telephoneController.text = contact.phones!.first.value ?? '';
-            }
-            if (contact.postalAddresses != null && contact.postalAddresses!.isNotEmpty) {
+            // Récupérer la première adresse postale (s'il existe)
+            if (contact.addresses.isNotEmpty) {
+              final address = contact.addresses.first;
               _adresseController.text = [
-                contact.postalAddresses!.first.street,
-                contact.postalAddresses!.first.city,
-                contact.postalAddresses!.first.postcode,
-                contact.postalAddresses!.first.country,
+                address.street,
+                address.city,
+                address.address,
+                address.country,
               ].where((element) => element != null && element.isNotEmpty).join(', ');
+            } else {
+              _adresseController.text = '';
             }
+            // Profession et Activité actuelle ne sont pas directement dans les contacts
+            // Laissez-les vides ou gérez-les manuellement.
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Contact importé avec succès !')),
           );
-        }
-      } on PlatformException catch (e) {
-        if (e.code == 'PERMISSION_DENIED') {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Permission de contacts refusée. Veuillez l\'activer dans les paramètres de l\'application.')),
-          );
+          // print('Contact importé: ${contact.displayName}'); // Pour le débogage
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de l\'importation du contact : ${e.message}')),
+            SnackBar(content: Text('Aucun contact selectionné')),
           );
         }
+      } on PlatformException catch (e) {
+        // Gérer les erreurs spécifiques à la plateforme
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de l\'importation du contact : ${e.message}')),
+        );
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Une erreur inattendue est survenue lors de l\'importation du contact.')),
         );
       }
-    } else if (permission.isDenied || permission.isPermanentlyDenied) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Permission de contacts refusée. Veuillez l\'activer dans les paramètres pour importer des contacts.'),
-          action: SnackBarAction(label: 'Ouvrir Paramètres', onPressed: openAppSettings),
-        ),
-      );
-    }
-  } */
-
- Future<void> _pickContact() async {
-    
-    try {
-      // 2. Ouvrir le sélecteur de contacts
-      // Ici, nous voulons un contact complet, y compris les adresses et téléphones
-      final Contact? contact = await FlutterContacts.openExternalPick(); // Ouvre le sélecteur natif
-      // Vous pouvez aussi utiliser FlutterContacts.getContacts() si vous voulez afficher votre propre liste
-      // et filtrer les contacts. openExternalPick() est plus simple pour l'import.
-
-      if (contact != null) {
-        setState(() {
-          // Remplir les champs du formulaire avec les données du contact
-          _nomController.text = contact.name.last ?? ''; // Nom de famille
-          _prenomController.text = contact.name.first ?? ''; // Prénom
-          _postNomController.text = contact.name.middle ?? ''; // Post-Nom (middle name)
-
-          // Récupérer le premier numéro de téléphone (s'il existe)
-          if (contact.phones.isNotEmpty) {
-            _telephoneController.text = contact.phones.first.number ?? '';
-          } else {
-            _telephoneController.text = '';
-          }
-
-          // Récupérer la première adresse postale (s'il existe)
-          if (contact.addresses.isNotEmpty) {
-            final address = contact.addresses.first;
-            _adresseController.text = [
-              address.street,
-              address.city,
-              address.address,
-              address.country,
-            ].where((element) => element != null && element.isNotEmpty).join(', ');
-          } else {
-            _adresseController.text = '';
-          }
-          // Profession et Activité actuelle ne sont pas directement dans les contacts
-          // Laissez-les vides ou gérez-les manuellement.
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Contact importé avec succès !')),
-        );
-        print('Contact importé: ${contact.displayName}'); // Pour le débogage
-      } else {
-         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Aucun contact selectionné')),
-        );
-      }
-    } on PlatformException catch (e) {
-      // Gérer les erreurs spécifiques à la plateforme
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur lors de l\'importation du contact : ${e.message}')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Une erreur inattendue est survenue lors de l\'importation du contact.')),
-      );
-    }
+    // } else {
+    //   // print('Permission contacts refusée ou refusée en permanence.');
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     SnackBar(
+    //       content: Text('Permission de contacts refusée. Veuillez l\'activer dans les paramètres pour importer des contacts.'),
+    //       action: SnackBarAction(label: 'Ouvrir Paramètres', onPressed: openAppSettings),
+    //     ),
+    //   );
+    // }
   }
 
   Future<void> _saveMember() async {
@@ -218,6 +199,8 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
         prenom: _prenomController.text,
         telephone: _telephoneController.text.isEmpty ? null : _telephoneController.text,
         adresse: _adresseController.text.isEmpty ? null : _adresseController.text,
+        dateAdhesion: _dateAdhesionController.text,
+        statut: 'Actif',
         profession: _professionController.text.isEmpty ? null : _professionController.text,
         activiteActuelle: _activiteActuelleController.text.isEmpty ? null : _activiteActuelleController.text,
         synchronized: 0, // Nouveau membre ou membre modifié, doit être synchronisé
@@ -262,7 +245,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
         actions: [
           IconButton(
             icon: Icon(Icons.contacts),
-            onPressed: _pickContact,
+            onPressed: requestContactsPermission,
             tooltip: 'Importer depuis les contacts',
           ),
         ],
@@ -296,8 +279,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
                   SizedBox(width: 10),
                   ElevatedButton.icon(
                     onPressed: () {
-                      print("xxxxxxxxxxxxxxxxxxxx");
-                      // _pickContact();
+                      // print("xxxxxxxxxxxxxxxxxxxx");
                       setState(() {
                         _isGeneratingAffiliation = !_isGeneratingAffiliation;
                         _generateAffiliationNumber();
@@ -331,7 +313,7 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
                 controller: _prenomController,
                 labelText: 'Prénom',
                 icon: Icons.person_outline,
-                validator: (value) => value == null || value.isEmpty ? 'Le prénom est requis.' : null,
+                // validator: (value) => value == null || value.isEmpty ? 'Le prénom est requis.' : null,
               ),
               SizedBox(height: 15),
               _buildTextFormField(
@@ -358,7 +340,21 @@ class _AddMemberScreenState extends State<AddMemberScreen> {
                 labelText: 'Activité Actuelle',
                 icon: Icons.local_activity,
               ),
+              
+              SizedBox(height: 15),
+              TextFormField(
+                controller: _dateAdhesionController,
+                decoration: InputDecoration(
+                  labelText: 'Date d\'Adhésion',
+                  prefixIcon: Icon(Icons.calendar_today),
+                  // border: OutlineInputBorder(),
+                ),
+                readOnly: true,
+                onTap: () => _selectAdhesionDate(context),
+                validator: (value) => value == null || value.isEmpty ? 'La date d\'adhésion est requise.' : null,
+              ),
               SizedBox(height: 30),
+              
               ElevatedButton.icon(
                 onPressed: _saveMember,
                 icon: Icon(Icons.save),

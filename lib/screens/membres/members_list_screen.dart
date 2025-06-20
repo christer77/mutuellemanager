@@ -30,6 +30,7 @@ class _MembersListScreenState extends State<MembersListScreen> {
     setState(() {
       _isLoading = true;
     });
+
     final List<Map<String, dynamic>> memberMaps = await _dbHelper.getAllMembres();
     setState(() {
       _members = memberMaps.map((map) => Membre.fromMap(map)).toList();
